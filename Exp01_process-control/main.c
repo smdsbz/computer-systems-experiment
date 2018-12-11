@@ -24,10 +24,10 @@ pipefd_pair_t pipefds = { 0 };  // read / write, respectively
 
 /* Signal Handlers */
 
-void do_nothing_handler(int signo) { return; }
+// void do_nothing_handler(int signo) { return; }
 
 
-void main_signal_handler(int signo) {
+/*interrupt*/ void main_signal_handler(int signo) {
     switch (signo) {
         case SIGINT: {  // <Ctrl-C>
             // kill all child processes
@@ -45,7 +45,7 @@ void main_signal_handler(int signo) {
 }
 
 
-void child_1_signal_handler(int signo) {
+/*interrupt*/ void child_1_signal_handler(int signo) {
     switch (signo) {
         case SIGUSR1: {
             // close writing end of pipe
@@ -59,11 +59,11 @@ void child_1_signal_handler(int signo) {
 }
 
 
-void child_2_signal_handler(int signo) {
+/*interrupt*/ void child_2_signal_handler(int signo) {
     switch (signo) {
         case SIGUSR1: {
             // close reading end of pipe
-            close(pipefds[1]);
+            close(pipefds[0]);
             printf("[child 2] Child Process 2 is Killed by Parent!\n");
             exit(EXIT_SUCCESS);
         }
@@ -81,7 +81,7 @@ void child_2_signal_handler(int signo) {
 void child_1_fn(void) {
     // register signals
     signal(SIGUSR1, child_1_signal_handler);
-    signal(SIGINT, do_nothing_handler);
+    signal(SIGINT, SIG_IGN);
     // close unused reading end of pipe
     close(pipefds[0]);
     // send message per second
@@ -103,7 +103,7 @@ void child_1_fn(void) {
 void child_2_fn(void) {
     // register signals
     signal(SIGUSR1, child_2_signal_handler);
-    signal(SIGINT, do_nothing_handler);
+    signal(SIGINT, SIG_IGN);
     // close unused writing end of pipe
     close(pipefds[1]);
     // read message from pipe and print to console
@@ -134,6 +134,7 @@ int main(void) {
     } else {
         pid_pool[0] = pid;
     }
+
     // create child process 2
     while ((pid = fork()) == -1) ;
     if (pid == 0) {
