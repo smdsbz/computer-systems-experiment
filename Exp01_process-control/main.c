@@ -88,7 +88,7 @@ void child_1_fn(void) {
     char buf[100] = { 0 };
     unsigned cnt = 1;
     while (1) {
-        snprintf(buf, 100, "I send you %d times.\n", cnt);
+        snprintf(buf, 100, "I send you %d times.\n", cnt++);
         write(pipefds[1], buf, strlen(buf));
         sleep(1);
     }
