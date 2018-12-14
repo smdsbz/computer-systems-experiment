@@ -36,6 +36,7 @@ pipefd_pair_t pipefds = { 0 };  // read / write, respectively
             }
             // wait for all childs to terminate
             while (wait(NULL) > 0) ;
+            /* perror("wait(NULL)");   // "No child processes" */
             printf("[main] Parent Process is Killed!\n");
             exit(EXIT_SUCCESS);
         }
