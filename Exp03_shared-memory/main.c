@@ -253,7 +253,7 @@ int main(int argc, const char **argv) {
         strncat(target_file, "/out", 5);
     }
 
-    printf("Copying from %s\n   to %s\n", source_file, target_file);
+    /* printf("Copying from %s\n   to %s\n", source_file, target_file); */
 
     // build shared buffer space
     if ((reader_key = ftok(source_file, 'r')) == -1) {

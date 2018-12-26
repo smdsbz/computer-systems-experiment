@@ -1,16 +1,18 @@
 CC		= gcc
 GREEN		= \033[0;32m
 NC		= \033[0m
-LOG_PREFIX	= $(GREEN)[buildsys]$(NC)
+LOG_PREFIX	= $(GREEN)💬$(NC)
 SOURCE		= main.c semaphore_utils.c
 OUTFILE		= main.exe
 TESTFILE	= ./testinput
+TIME_FORMAT	= Total time elapsed: %e sec, CPU percentage: %P, Context switch: %w time(s)
+RUN_COMMAND	= ./$(OUTFILE) $(TESTFILE)
 
 main: $(OUTFILE)
-	@echo "$(LOG_PREFIX) Start running. Showing command:"
-	time -f "Total time elapsed: %e, CPU percentage: %P, Context switched: %w" ./$(OUTFILE) $(TESTFILE)
+	@echo "$(LOG_PREFIX) Start running: $(RUN_COMMAND)"
+	@time -f "   $(TIME_FORMAT)" $(RUN_COMMAND)
 	@echo "$(LOG_PREFIX) Finished running!"
-	@echo "$(LOG_PREFIX) Showing diff..."
+	@echo "$(LOG_PREFIX) Showing diff... (no output if program runs as expected)"
 	@diff $(TESTFILE) out
 
 $(OUTFILE): $(SOURCE)
