@@ -85,7 +85,7 @@ const char *gethsize(size_t size) {
     int unitidx = 0;
     double filesize = size;
     for (; filesize > 1024.0 && unitidx != 4; filesize /= 1024.0, ++unitidx) ;
-    sprintf(retbuf, "% 7.1f%c", filesize, units[unitidx]);
+    sprintf(retbuf, "%.1f%c", filesize, units[unitidx]);
     return retbuf;
 }
 
@@ -93,33 +93,45 @@ const char *gethsize(size_t size) {
 /*
  * Print status of the file system node.
  * :param path: File path.
+ * :param is_dir: Valid if not NULL.
+ * :param filsiz: Valid if not NULL, this is calculated recursively.
  */
 void printstat(const char *path, bool *is_dir, size_t *filsiz) {
     static struct stat sb;
-    // get absolute path
-    if (strnlen(path, 255) == 255) {
-        exit(EXIT_FAILURE);
+    if (is_dir != NULL) {
+        *is_dir = 0;
     }
-    char *abspath = realpath(path, NULL);
+    // get absolute path
+    char *abspath = realpath(path, NULL);   // no trailing '/', even with a directory
     if (stat(abspath, &sb) == -1) {
         perror("fstat");
         exit(EXIT_FAILURE);
+    }
+    if (filsiz != NULL) {
+        *filsiz = sb.st_size;
     }
     // filetype
     char typechar;
     switch (sb.st_mode & S_IFMT) {
         case S_IFBLK: { typechar = 'b'; break; }
         case S_IFCHR: { typechar = 'c'; break; }
-        case S_IFDIR: { typechar = 'd'; break; }
+        case S_IFDIR: {
+            typechar = 'd';
+            if (is_dir != NULL) {
+                *is_dir = 1;
+            }
+            break;
+        }
         case S_IFLNK: { typechar = 'l'; break; }
         case S_IFREG: { typechar = '-'; break; }
         case S_IFSOCK: { typechar = 's'; break; }
+        default: { typechar = '?'; break; }
     }
     // last modified time
     char lastmodtime[32] = { '\0' };
-    strftime(lastmodtime, 32, "%b %d", localtime(&sb.st_mtim.tv_sec));
+    strftime(lastmodtime, 32, "%b %d %R", localtime(&sb.st_mtim.tv_sec));
     // generate final output
-    printf("%c%s %3lu %8s %8s %s %s %s\n",
+    printf("%c%s %3lu %7s %7s %7s %s %s",
             typechar, getpermstr(sb.st_mode & 0777),
             sb.st_nlink,
             getpwuid(sb.st_uid)->pw_name, getgrgid(sb.st_gid)->gr_name,
@@ -134,28 +146,162 @@ void printstat(const char *path, bool *is_dir, size_t *filsiz) {
 
 /* Helper Data Structure - Queue */
 
-typedef struct Queue {
-    u_int32_t       data;
-    struct Queue   *next;
-} Queue;
+struct QueueNode {
+    char                path[256];
+    int                 depth;
+    struct QueueNode   *next;
+};
+
+struct Queue {
+    struct QueueNode   *start;
+    struct QueueNode   *end;
+} dirque;
+
+
+void printque() {
+    struct QueueNode *pqn = dirque.start;
+    while (pqn != NULL) {
+        printf("%s\n", pqn->path);
+        pqn = pqn->next;
+    }
+}
+
+
+bool emptyque(struct Queue q) {
+    return q.start == NULL;
+}
+
+
+void enque(struct Queue *q, const char *path, int depth) {
+    // allocate space
+    if (q->start == NULL) {
+        if ((q->start = malloc(sizeof(struct QueueNode))) == NULL) {
+            perror("malloc");
+            exit(EXIT_FAILURE);
+        }
+        q->end = q->start;
+    } else {
+        if ((q->end->next = malloc(sizeof(struct QueueNode))) == NULL) {
+            perror("malloc");
+            exit(EXIT_FAILURE);
+        }
+        q->end = q->end->next;
+    }
+    // regulate end
+    q->end->next = NULL;
+    // copy data, truncate if needed
+    strncpy(q->end->path, path, 255);
+    q->end->path[255] = '\0';
+    q->end->depth = depth;
+    return;
+}
+
+
+/*
+ * :return: QueueNode. A later free is required!
+ */
+struct QueueNode *deque(struct Queue *q) {
+    if (q->start == NULL) {
+        return NULL;
+    }
+    struct QueueNode *retptr = q->start;
+    // fix queue
+    q->start = q->start->next;
+    if (q->start == NULL) {
+        q->end = NULL;
+    }
+    // close node
+    retptr->next = NULL;
+    return retptr;
+}
 
 
 /* Call Entry */
 
 /*
- * Print directory and all subsequent directories, til specified depth.
- * :param dirna: Top / Starting directory name.
- * :param depth: Max recursive call times.
+ * Print the first directory is session's queue.
+ * :param q: Pointer to directory queue. If queue is empty, nothing is printed.
+ *      After a successful print, the first element in the queue is consumed.
  */
-void printdir(const char *dirna, int depth) {
+void _printdirqueue(struct Queue *q) {
+    /* printque(); */
+    struct QueueNode *dirno = deque(q);
+    if (dirno == NULL) {
+        return;
+    }
+    /* puts("after deque"); */
+    /* printque(); */
+    char *abspath_noslash = realpath(dirno->path, NULL);
     DIR *dp;
+    if ((dp = opendir(abspath_noslash)) == NULL) {
+        perror("opendir");
+        exit(EXIT_FAILURE);
+    }
+    printf("%s:\n", abspath_noslash);
+    // list dir
+    struct dirent *pdent;
+    size_t total_size = 0;
+    bool is_dir;
+    size_t size;
+    while ((pdent = readdir(dp)) != NULL) {
+        // skip current directory and parent directory
+        if (strcmp(".", pdent->d_name) == 0 || strcmp("..", pdent->d_name) == 0) {
+            continue;
+        }
+        // filepath = abspath + "/" + filename
+        char filepath[256];
+        strcpy(filepath, abspath_noslash);
+        strcat(filepath, "/");
+        strcat(filepath, pdent->d_name);
+        // print single file record
+        printstat(filepath, &is_dir, &size);
+        printf(" (%d)\n", dirno->depth);
+        // summary jobs
+        total_size += size;
+        // append to queue if is a directory
+        if (is_dir && strcmp(".git", splitname(filepath))) {
+            enque(&dirque, filepath, dirno->depth + 1);
+            /* printque(); */
+        }
+    }
+    printf("total %s\n\n", gethsize(total_size));
+    // exit jobs
+    closedir(dp);
+    free(dirno);
+    free(abspath_noslash);
+    return;
+}
 
+
+/*
+ * Print directory and all subsequents.
+ * :param path:
+ * :param depth: [UNUSED]
+ */
+void printdir(const char *path, int depth) {
+    char *abspath_noslash = realpath(path, NULL);
+    if (abspath_noslash == NULL) {
+        perror("realpath");
+        exit(EXIT_FAILURE);
+    }
+    // en-queue the starting point
+    enque(&dirque, abspath_noslash, depth);
+    while (!emptyque(dirque)) {
+        _printdirqueue(&dirque);
+        /* printque(); */
+        /* getchar(); */
+    }
+    return;
 }
 
 
 /* Main */
 
 int main(const int argc, const char **argv) {
-    printstat("./main.c");
+    if (argc != 2) {
+        printf("Usage: PROG PATH\n");
+        exit(EXIT_FAILURE);
+    }
+    printdir(argv[1], 0);
     return EXIT_SUCCESS;
 }
