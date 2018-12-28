@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -9,39 +10,82 @@
 #include <dirent.h>
 
 #include <pwd.h>
+#include <grp.h>
 
 #include <time.h>
 
+typedef char bool;
 
-/* Utility Functions */
+
+/* Helper Functions */
 
 /*
  * Split out name from path
  * :param path: Path to file or directory.
  * :return: Name (statically allocated, DO NOT free), NULL on invalid path or error.
  */
-char *splitname(const char *path) {
+const char *splitname(const char *path) {
     static char retbuf[256];
     // safe-copy path to pathbak
     if (strnlen(path, 255) == 255) {
         return NULL;
     }
     char pathbak[256];
-    strncpy(pathback, path, 255);
+    strcpy(pathbak, path);
     pathbak[255] = '\0';
     int lastslash = strlen(pathbak) - 1;
     // validation
-    if (lastslash == -1) {
+    if (lastslash == -1) {      // empty
         return NULL;
-    } else if (lastslash == 0 && pathbak[0] == '\0') {
+    } else if (strcmp("/", pathbak) == 0) {     // "/"
         return NULL;
-    } else if (pathbak[lastslash] == '/') {
+    } else if (pathbak[lastslash] == '/') {     // "xxxx/"
         pathbak[lastslash] = '\0';
     }
     // get index of last '/'
-    for (; lastslash && pathbak[lastslash] != '/'; --lastlash) ;
+    for (; lastslash && pathbak[lastslash] != '/'; --lastslash) ;
     ++lastslash;
     strcpy(retbuf, pathbak + lastslash);
+    return retbuf;
+}
+
+
+/*
+ * Translate permission bits to string
+ * :param perm: Permission bits.
+ * :return: "rwx......" formatted string (NO free)
+ */
+const char *getpermstr(u_int16_t bits) {
+    static char retstr[10];
+    strcpy(retstr, "---------");
+    int plc = 0;
+    for (; plc != 3; ++plc, bits <<= 3) {
+        if (bits & 0400) {
+            retstr[0 + plc * 3] = 'r';
+        }
+        if (bits & 0200) {
+            retstr[1 + plc * 3] = 'w';
+        }
+        if (bits & 0100) {
+            retstr[2 + plc * 3] = 'x';
+        }
+    }
+    return retstr;
+}
+
+
+/*
+ * Translate file size in byte to human readable
+ * :param size:
+ * :return: c-string (NO free)
+ */
+const char *gethsize(size_t size) {
+    static char retbuf[33];
+    static char units[] = "BKMGT";
+    int unitidx = 0;
+    double filesize = size;
+    for (; filesize > 1024.0 && unitidx != 4; filesize /= 1024.0, ++unitidx) ;
+    sprintf(retbuf, "% 7.1f%c", filesize, units[unitidx]);
     return retbuf;
 }
 
@@ -50,9 +94,14 @@ char *splitname(const char *path) {
  * Print status of the file system node.
  * :param path: File path.
  */
-void printstatfd(const char *path) {
+void printstat(const char *path, bool *is_dir, size_t *filsiz) {
     static struct stat sb;
-    if (stat(path, &sb) == -1) {
+    // get absolute path
+    if (strnlen(path, 255) == 255) {
+        exit(EXIT_FAILURE);
+    }
+    char *abspath = realpath(path, NULL);
+    if (stat(abspath, &sb) == -1) {
         perror("fstat");
         exit(EXIT_FAILURE);
     }
@@ -66,27 +115,32 @@ void printstatfd(const char *path) {
         case S_IFREG: { typechar = '-'; break; }
         case S_IFSOCK: { typechar = 's'; break; }
     }
-    // permission
-    // owner
-    // group
     // last modified time
-    char lastmodtime[128] = { '\0' };
-    strftime(lastmodtime, 128, "%b %d", localtime(&sb.st_mtim.tv_sec));
-    // filename
-    // TODO:
-    printf("%c%o %u %u %lu %s %s\n",
-            typechar, sb.st_mode & 0777, sb.st_uid, sb.st_gid, sb.st_size,
-            lastmodtime, name);
+    char lastmodtime[32] = { '\0' };
+    strftime(lastmodtime, 32, "%b %d", localtime(&sb.st_mtim.tv_sec));
+    // generate final output
+    printf("%c%s %3lu %8s %8s %s %s %s\n",
+            typechar, getpermstr(sb.st_mode & 0777),
+            sb.st_nlink,
+            getpwuid(sb.st_uid)->pw_name, getgrgid(sb.st_gid)->gr_name,
+            gethsize(sb.st_size),
+            lastmodtime,
+            splitname(abspath));
+    // exit jobs
+    free(abspath);
     return;
 }
 
-/*
- * List all contents in directory.
- * :param dp: Directory to be listed.
- */
-void listdirp(const DIR *dp) {
 
-}
+/* Helper Data Structure - Queue */
+
+typedef struct Queue {
+    u_int32_t       data;
+    struct Queue   *next;
+} Queue;
+
+
+/* Call Entry */
 
 /*
  * Print directory and all subsequent directories, til specified depth.
@@ -102,20 +156,6 @@ void printdir(const char *dirna, int depth) {
 /* Main */
 
 int main(const int argc, const char **argv) {
-    FILE *fp;
-    int fd;
-    if ((fp = fopen("./main.c", "r")) == NULL) {
-        perror("fopen");
-        exit(EXIT_FAILURE);
-    }
-    if ((fd = fileno(fp)) == -1) {
-        perror("fileno");
-        exit(EXIT_FAILURE);
-    }
-    printstatfd(fd);
-    if (fclose(fp) == -1) {
-        perror("fclose");
-        exit(EXIT_FAILURE);
-    }
+    printstat("./main.c");
     return EXIT_SUCCESS;
 }
