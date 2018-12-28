@@ -16,12 +16,43 @@
 /* Utility Functions */
 
 /*
- * Print status of the file system node.
- * :param inode:
+ * Split out name from path
+ * :param path: Path to file or directory.
+ * :return: Name (statically allocated, DO NOT free), NULL on invalid path or error.
  */
-void printstatfd(int fd) {
-    struct stat sb;
-    if (fstat(fd, &sb) == -1) {
+char *splitname(const char *path) {
+    static char retbuf[256];
+    // safe-copy path to pathbak
+    if (strnlen(path, 255) == 255) {
+        return NULL;
+    }
+    char pathbak[256];
+    strncpy(pathback, path, 255);
+    pathbak[255] = '\0';
+    int lastslash = strlen(pathbak) - 1;
+    // validation
+    if (lastslash == -1) {
+        return NULL;
+    } else if (lastslash == 0 && pathbak[0] == '\0') {
+        return NULL;
+    } else if (pathbak[lastslash] == '/') {
+        pathbak[lastslash] = '\0';
+    }
+    // get index of last '/'
+    for (; lastslash && pathbak[lastslash] != '/'; --lastlash) ;
+    ++lastslash;
+    strcpy(retbuf, pathbak + lastslash);
+    return retbuf;
+}
+
+
+/*
+ * Print status of the file system node.
+ * :param path: File path.
+ */
+void printstatfd(const char *path) {
+    static struct stat sb;
+    if (stat(path, &sb) == -1) {
         perror("fstat");
         exit(EXIT_FAILURE);
     }
@@ -35,15 +66,17 @@ void printstatfd(int fd) {
         case S_IFREG: { typechar = '-'; break; }
         case S_IFSOCK: { typechar = 's'; break; }
     }
+    // permission
     // owner
     // group
     // last modified time
     char lastmodtime[128] = { '\0' };
     strftime(lastmodtime, 128, "%b %d", localtime(&sb.st_mtim.tv_sec));
     // filename
-    printf("%c%o %u %u %lu %s [filename]\n",
+    // TODO:
+    printf("%c%o %u %u %lu %s %s\n",
             typechar, sb.st_mode & 0777, sb.st_uid, sb.st_gid, sb.st_size,
-            lastmodtime);
+            lastmodtime, name);
     return;
 }
 
