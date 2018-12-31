@@ -15,3 +15,4 @@ main: $(OUTFILE)
 $(OUTFILE): $(SOURCE)
 	@echo "$(LOG_PREFIX) Source outdated! Re-building..."
 	@$(CC) $(SOURCE) -o $(OUTFILE)
+

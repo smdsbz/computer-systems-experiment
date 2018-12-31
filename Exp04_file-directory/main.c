@@ -305,3 +305,4 @@ int main(const int argc, const char **argv) {
     printdir(argv[1], 0);
     return EXIT_SUCCESS;
 }
+

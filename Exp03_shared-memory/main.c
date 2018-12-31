@@ -28,8 +28,8 @@ typedef char bool;
 
 /* Configurations */
 
-#define BUFFER_CELL_SIZE    ( 1024 )
-#define BUFFER_CELL_NUM     ( 32 )
+#define BUFFER_CELL_SIZE    ( 65536 )
+#define BUFFER_CELL_NUM     ( 4 )
 
 
 /* Runtime Variables */
